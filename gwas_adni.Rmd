@@ -1,0 +1,507 @@
+---
+title: "Alzheimer’s disease GWAS"
+author: "Svetlana Polyanskaya"
+date: '`r Sys.Date()`'
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This research presents a genome-wide association study (GWAS) analysis in order to find the SNPs associated with Alzheimer’s disease (AD). The research was made on the ADNI batch 1 data. More about the ADNI project at https://adni.loni.usc.edu/about/.
+
+# Descriptive analysis of phenotype and covariates
+
+The analysis was performed on the data of 757 individuals with phenotype and genotype data. The number of controls was 214, the number of cases was 543. Of the latter, 368 had mild AD form and 175 - severe AD form. But in the research both mild and severe AD symptoms were treated as cases without differentiation.
+
+There were 308 females, and 449 males. Among them with any AD form: 209 females and 334 males, and healthy controls: 99 females and 115 males.
+
+The number of individuals with 2 major alleles of APOE4 is 381, with 1 - 296, and with 2 minor alleles - 80, among them number of cases for these 3 allele types, respectively: 225, 243, 75.
+
+Mean age was 75.17 years in general, 75.67 - in controls, 74.97 - in cases.
+
+Mean duration of education was 15.55 years in general, 16.07 - in controls, 15.34 - in cases. 
+
+The chunks and the tables with the brief data desciption are presented at **Appendix 1**.
+
+# Methods
+
+GWAS was conducted using R version 4.4.2, with all required libraries (see **Appendix 0**) built for this version. The analysis followed the pipeline outlined below: 
+
+1. Quality control (QC):
+
+   * QC of SNPS. Only SNPs that meet these criteria were selected: call rate (CR) >= 95%, minor allele frequency (MAF) >= 5% and z-score of Hardy Weinberg Equilibrium test (z.HWE) <= 3.3 in controls.
+   * QC of individuals. Individuals were selected by filters: no sex discrepancy (X-chromosome heterozygosity > 0.2 in females and < 0.2 in males), heterozygosity <= 0.1. Also only unrelated individuals were selected. The relations among individuals were checked with functions applied to the `snpgdsOpen` object: `snpgdsLDpruning`, `snpgdsIBDMoM`, `snpgdsIBDSelection`. After that kinship filter (kinship should be < 0.1) and the `related` function of the `SNPassoc` library were applied.
+   
+2. Association analysis:
+
+   * Principal component analysis (PCA) on the genomic data using the `snpgdsPCA` function.
+   * Association model between CASECONTROL and the SNPs adjusted by age, sex, years of education, APOE4 genotype and the first two principal components. The model was built with the `snp.rhs.tests` function.
+   * Correction for multiple testing. At first, Bonferroni correction was applied. But no SNP passed the Bonferroni-corrected p-value threshold. Therefore, a less stringent threshold of 10^-4 was applied.
+   
+3. Post-GWAS analysis:
+
+   * Gene annotation using `biomaRt` library, biomart `ENSEMBL_MART_ENSEMBL` and the dataset `hsapiens_gene_ensembl`. The used biomart was gene-oriented, as the SNP-oriented one did not give much information.
+   * Odds ratio (OR) calculation under dominant, recessive and additive models. A mini-pipeline of `SNPassoc` functions was used: `setupSNP`, `WGassociation`, `odds`.
+   * Selecting SNPs that have more impact on casecontrol by combining `stepAIC` and `glm` functions.
+   * Genetic score calculation with the `riskScore` function of the `PredictABEL` library.
+   * Building the association model between casecontrol and the genetic risk score and validation of this model with ROC-AUC.
+   
+# Results
+
+After SNP QC, a total number of 99001 SNPs were excluded: 42467 with CR < 0.95, 58344 with MAF < 0.05 and 112 with z.HWE > 3.3 in controls. Number of SNPs taken to the research was 521900. SNP QC code is presented at **Appendix 2**.
+
+QC was also applied to individuals and 21 of them did not pass the QC: 18 with outlying heterozygosity rates and 3 were relatives or duplicates, and 1 had bad CR. In total, 736 individuals were taken to the analysis. See **Appendix 3** for the QC of individuals.
+
+The data that passed the QC went through the association analysis. The code for this part of the research is presented at **Appendix 4**. The model studied association between CASECONTROL and the SNPs and was adjusted by age, sex, years of education, APOE4 genotype and the first two principal components. After that the p-value Bonferroni correction was applied, and no SNP passed it, what is visualized in **Figure 1. Manhattan Plot with Bonferroni Significant SNPs** of **Appendix 4**. A less stringent threshold of 10^-4 was applied instead.
+
+27 SNPs passed the threshold of 10^-4. For these 27 SNPs gene annotation was performed and OR under log-additive, dominant and recessive models were calculated. Genes were unavailable for 10 SNPs. Among the 27 potentially associated with casecontrol SNP, only 5 ones have OR > 1: rs1132005, rs4266763, rs6114605, rs769031, rs8141950. The others have OR < 1. The code for gene annotation is presented at **Appendix 5** and for OR calculation - at **Appendix 6**.
+
+The table with the 27 SNPs that passed the threshold and their chromosome numbers, genomic positions, minor alleles, MAFs, the annotated genes and the OR under 3 models is presented at **Appendix 7**.
+
+Nex step was genetic risk score calculation. But before, we needed to select those SNPs which potentially have higher significance than the others. For this purpose automatic variable selection based on Akaike information criteria was applied. 21 SNPS were selected: **rs1012995, rs10506854, rs10876432, rs10892831, rs11595021, rs1421761, rs17028008, rs17099425, rs2884670, rs4266763, rs4472075, rs4693092, rs4953672, rs6114605, rs6481557, rs7157639, rs769031, rs793291, rs8141950, rs872626, rs9896368**. See **Appendix 8** to view the code for genetic risk calculation and **Figure 2. Genetic score distribution** of **Appendix 8** to view the risk score distribution.
+
+Then a regression model which estimates how changes in the risk score affect the probability of being a case was built. See the code at **Appendix 9**. Beta1 coefficient of the model was  0.4748 and the OR = exp(0.4748) was about 1.608. It means that each additional risk allele increases the odds of the disease by 60.8%, the latter was calculated by the formula (1.608−1)*100.
+
+The model was validated via the ROC-AUC plot (see **Figure 3. ROC plot for genetic score model validation** at **Appendix 9**). This model has good discrimination ability with AUC=0.827.
+
+# Discussion and conclusions
+
+The research revealed 21 SNP possibly associated with AD. The genetic risk score association model was validated with ROC-AUC. That looks promising.
+
+For better understanding, the annotated genes were examined. Most part of the known genes are related to different diseases of nervous system: 
+
+* **WDFY3** is associated with the primary autosomal-dominant microcephaly 18 (Harz et al., 2014) and mild and non-specific neurodevelopmental delay (Le Duc et al., 2019).
+* **TXNDC16** is associated with Meningioma (Harz et al., 2014).
+* **ADAMTS9-AS2** is associated with high grade glioma (Yan et al., 2019).
+* **NF1** is associated with neurofibromatosis type 1 (Kehrer-Sawatzki & Cooper, 2021).
+* **TGM6** Parkinson's disease of Chinese origin, episodic ataxia, and dystonic tremors (Sharawat et al., 2021).
+
+These diseases have different nature from AD, but still, functioning of these genes may have impact on other processes that take place in the nervous system.
+
+Two other known genes are also associated with diseases: **CFAP300** is associated with primary ciliary dyskinesia (Zietkiewicz et al., 2019) and **RAD51AP1** is a tumour growth factor (Bridges et al., 2020).
+
+The information about the annotated genes increases the possibility that the 21 found SNP are associated with AD. In the future it would be good to reveal the impact of these SNPs on the protein production and/or functional changes their minor alleles lead to.
+
+# Appendix 0. Libraries loading
+
+The libraries used are:
+
+```{r lib_load, message=FALSE}
+library(snpStats)
+library(SNPRelate)
+library(qqman)
+library(biomaRt)
+library(dplyr)
+library(SNPassoc)
+library(PredictABEL)
+library(MASS)
+library(ROCR)
+```
+
+# Appendix 1. Descriptive analysis chunks
+
+Before the analysis we need to upload the data and to match the genotypes with the phenotypes. There were 819 phenotypes and 757 genotypes. Thus, 757 genotyped individuals are analysied.
+
+```{r data_loading}
+# setwd('D:/Omics Data Analysis/Genomics/Final_task')
+# loading phenotype data
+ADNI_demog <- read.delim("andi_demographics.txt", sep = " ")
+rownames(ADNI_demog) <- ADNI_demog$ID
+
+# reading PLINK files
+ADNI_plink <- read.plink("ADNI_cluster_01_forward_757LONI") 
+ADNI_geno <- ADNI_plink$genotypes 
+ADNI_annot <- ADNI_plink$map 
+ADNI_family <- ADNI_plink$fam 
+rownames(ADNI_geno) <- ADNI_family$member 
+
+# matching geno- and phenotype by row names:
+ids <- intersect(rownames(ADNI_geno), rownames(ADNI_demog))
+geno <- ADNI_geno[ids, ]
+demog <- ADNI_demog[ids, ]
+# identical(rownames(demog), rownames(geno)) # TRUE
+
+# convert columns to factors
+demog[c('DISEASE_STATUS', 'REPORTED_SEX', 'APOE4')] <- 
+  lapply(demog[c('DISEASE_STATUS', 'REPORTED_SEX', 'APOE4')], factor)
+```
+
+Total number of individuals:
+
+```{r ind_total}
+nrow(demog)
+```
+
+To count the number of cases and controls we need to convert rows with disease status CN (Cognitively Normal) to controls and others to cases. After that the numbers of cases and controls are:
+
+```{r casecontrol}
+demog$CASECONTROL <- as.factor(ifelse(demog$DISEASE_STATUS == 'CN', 0, 1))
+table(demog$CASECONTROL)
+```
+
+We can also see the counts of mild cognitive impairment (LMCI) and full AD:
+
+```{r lmci_ad}
+table(demog$DISEASE_STATUS)
+```
+
+Sex and APOE4 by casecontrol:
+
+```{r cat_cc}
+table(demog$REPORTED_SEX)
+table(demog[,c('REPORTED_SEX', 'CASECONTROL')])
+table(demog$APOE4)
+table(demog[,c('APOE4', 'CASECONTROL')])
+```
+
+Age and years of education by casecontrol:
+
+```{r num_cc}
+mean(demog$AGE)
+tapply(demog$AGE, demog$CASECONTROL, mean, na.rm = TRUE)
+mean(demog$YEARS_EDUCATION)
+tapply(demog$YEARS_EDUCATION, demog$CASECONTROL, mean, na.rm = TRUE)
+```
+
+# Appendix 2. QC of SNPS
+
+Filtering SNPs:
+
+```{r qc_snp}
+info.snps <- col.summary(geno)
+# keeping only SNPs with a call rate >= 95%, MAF of >= 5% and z.HWE <= 3.3 in controls
+controls <- demog$CASECONTROL == 0 & !is.na(demog$CASECONTROL)
+geno.controls <- geno[controls,]
+info.controls <- col.summary(geno.controls)
+
+use <- info.snps$Call.rate >= 0.95 &
+       info.snps$MAF >= 0.05 &
+       abs(info.controls$z.HWE <= 3.3)    
+mask.snps <- use & !is.na(use)
+
+geno.qc.snps <- geno[ , mask.snps]
+
+annotation <- ADNI_annot[mask.snps, ]
+```
+
+Numbers of SNPs that did not pass the quality control:
+
+```{r filt_snp}
+paste('CR < 0.95:', sum(info.snps$Call.rate < 0.95))
+paste('MAF < 0.05:', sum(info.snps$MAF < 0.05, na.rm=TRUE))
+paste('HWE > 3.3 in controls:', sum(abs(info.controls$z.HWE > 3.3), na.rm=TRUE))    
+paste('Total SNPs not passed the QC:', sum(!mask.snps))
+```
+
+# Appendix 3. QC of individuals
+
+Sex discrepancy filtering:
+
+```{r qc_sex}
+# check heterozygosity of the X chromosome
+geno.X <- geno.qc.snps[,annotation$chromosome=="23" & 
+                         !is.na(annotation$chromosome)]
+info.X <- row.summary(geno.X)
+
+geno.X <- geno.qc.snps[,annotation$chromosome=="23" & 
+                         !is.na(annotation$chromosome)]
+
+sex.discrep <- (demog$REPORTED_SEX=="Male" & info.X$Heterozygosity > 0.2) |  
+               (demog$REPORTED_SEX=="Female" & info.X$Heterozygosity < 0.2)
+# any(sex.discrep) # FALSE
+```
+
+Heterozygosity filtering:
+
+```{r qc_het}
+info.indv <- row.summary(geno.qc.snps)
+MAF <- col.summary(geno.qc.snps)$MAF
+callmatrix <- !is.na(geno.qc.snps)
+hetExp <- callmatrix %*% (2*MAF*(1-MAF))
+hetObs <- with(info.indv, Heterozygosity*(ncol(geno.qc.snps))*Call.rate)
+info.indv$hetF <- 1-(hetObs/hetExp)
+```
+
+Duplicated or related individuals filtering:
+
+```{r qc_relatives, message=FALSE}
+# Transform PLINK data into GDS format
+snpgdsBED2GDS("ADNI_cluster_01_forward_757LONI.bed", 
+              "ADNI_cluster_01_forward_757LONI.fam",
+              "ADNI_cluster_01_forward_757LONI.bim", 
+              out="adniGDS", verbose = F)
+
+genofile <- snpgdsOpen("adniGDS")
+
+# Prune SNPs for IBD analysis
+set.seed(2)
+snps.qc <- colnames(geno.qc.snps)
+snp.prune <- snpgdsLDpruning(genofile, ld.threshold = 0.2, 
+                             snp.id = snps.qc, verbose = F)
+
+# identity-by-descent (ibd) analysis
+snps.ibd <- unlist(snp.prune, use.names=FALSE)
+ibd <- snpgdsIBDMoM(genofile, kinship=TRUE, snp.id = snps.ibd, 
+                    num.thread = 1, verbose = F)
+
+# kinship score >= 0.1 filtering
+ibd.kin <- snpgdsIBDSelection(ibd) 
+ibd.kin.thres <- subset(ibd.kin, kinship >= 0.1)
+ids.rel <- related(ibd.kin.thres)
+```
+
+Applying all the filters above: 
+
+```{r ind_filters_all}
+use <- info.indv$Call.rate >= 0.95 &
+       abs(info.indv$hetF) <= 0.1 &
+       !sex.discrep &
+       !rownames(info.indv)%in%ids.rel
+mask.indiv <- use & !is.na(use)
+geno.qc <- geno.qc.snps[mask.indiv, ]
+
+demog.qc <- demog[mask.indiv, ]
+# identical(rownames(demog.qc), rownames(geno.qc))
+```
+
+Removed individuals:
+
+```{r filt_ind}
+paste('CR < 0.95:', sum(info.indv$Call.rate < 0.95))
+paste('heterozygosity > 0.1:', sum(abs(info.indv$hetF) > 0.1))
+paste('Sex discrepancies:', sum(sex.discrep))    
+paste('Individuals related with others:', length(ids.rel))
+paste('Total individuals not passed the QC:', sum(!mask.indiv))
+```
+
+# Appendix 4. Association analysis
+
+PCA:
+
+```{r pca}
+pca <- snpgdsPCA(genofile, sample.id = rownames(geno.qc),  
+                           snp.id = snps.ibd, 
+                           num.thread=1, verbose = F)
+# merge PC1 and PC2 to phenotype data and closing the genofile
+demog.qc <- data.frame(demog.qc, pca$eigenvect[, 1:2])
+closefn.gds(genofile)
+```
+
+Association between CASECONTROL and the SNPs adjusted by age, sex, years of education, APOE4 genotype and the first two principal components:
+
+```{r assoc}
+res <- snp.rhs.tests(CASECONTROL ~ AGE + REPORTED_SEX + YEARS_EDUCATION + APOE4 + X1 + X2, 
+                         data=demog.qc, snp.data=geno.qc, family="binomial")
+```
+
+Bonferroni correction:
+
+```{r bonferoni}
+ps <- p.value(res)
+bonf.sig <- 0.05 / sum(!is.na(ps))  
+sig.snps <- res[ps <= bonf.sig, ]
+```
+
+Manhattan plot which shows there were no SNPs which meet the Bonferroni p-value threshold:
+
+```{r manhattan, message=FALSE}
+pvals <- data.frame(SNP=annotation$snp.name, 
+                    CHR=annotation$chromosome,
+                    BP=annotation$position,
+                    P=ps)
+
+manhattan(pvals, 
+          chr = "CHR", 
+          bp = "BP", 
+          snp = "SNP", 
+          p = "P", 
+          genomewideline = -log10(bonf.sig),
+          highlight = sig.snps@snp.names,
+          main = "Figure 1. Manhattan Plot with Bonferroni Significant SNPs")
+```
+
+As no SNP passed the corrected p-values threshold a new one is taken:
+
+```{r threshold_change}
+snp.thresh <- res[ps <= 0.0001, ]
+```
+
+SNPs that passed the new threshold:
+
+```{r selected_snps}
+snp.sel <- annotation[snp.thresh@snp.names,]
+snp.sel <- merge(snp.sel, col.summary(geno.qc), by=0) 
+snp.sel <- snp.sel[, c('snp.name','chromosome', 'position', 'allele.2', 'MAF')]
+rownames(snp.sel) <- snp.sel$snp.name 
+```
+
+# Appendix 5. Gene annotation
+
+Preparing the gene information for gene annotation:
+
+```{r gene_annot}
+# obtain gene info
+gene_mart <- useMart(biomart = "ENSEMBL_MART_ENSEMBL", dataset = 'hsapiens_gene_ensembl')
+
+# recode genetic coordinates to the format appropriate for gene_mart
+snp.sel$chromosomal_region <- paste(snp.sel$chromosome,':', snp.sel$position, ':',
+                                    snp.sel$position, sep = '')
+
+# make annotation
+# to view available filters and attributes call listFilters and listAttributes, respectively
+# gene_attrubutes <- listAttributes(gene_mart)
+# gene_filters <- listFilters(gene_mart)
+
+gene_annotation <- getBM(attributes = c("ensembl_gene_id","hgnc_id", "start_position",
+                                        "end_position","chromosome_name",
+                                        "external_gene_name"),
+                        filters = "chromosomal_region",
+                        values = snp.sel$chromosomal_region,
+                        mart = gene_mart)
+```
+
+Merging gene annotation with SNPs:
+
+```{r gene_annot_merge}
+snp.sel$ensembl_gene_id <- NA
+snp.sel$hgnc_id <- NA
+snp.sel$external_gene_name <- NA
+
+for(i in 1:nrow(snp.sel)) {
+    pos <- snp.sel$position[i]
+    
+    # find genes where the SNP position is within the gene boundaries
+    matching_genes <- gene_annotation[
+      gene_annotation$start_position <= pos & gene_annotation$end_position >= pos, ]
+    
+    if(nrow(matching_genes) > 0) {
+      snp.sel$ensembl_gene_id[i] <- matching_genes$ensembl_gene_id[1]
+      snp.sel$hgnc_id[i] <- matching_genes$hgnc_id[1]
+      snp.sel$external_gene_name[i] <- matching_genes$external_gene_name[1]
+    }
+}
+snp.annot <- snp.sel[ , !(names(snp.sel) %in% c('chromosomal_region'))]
+```
+
+# Appendix 6. Odds ratio calculation
+
+The genotypes are recoded so that they contain allele letters, not numbers: if genotype value is 01 it means that it has 2 major alleles, 02 - 1 major and 1 minor allele, 03 - 2 minor alleles. The format with letters will be used if further calculations.
+
+```{r geno_recode}
+geno.sel <- as.data.frame(geno.qc[,rownames(snp.sel)])
+geno.sel <- geno.sel %>% mutate_if(is.raw, as.numeric)
+
+annot.sel <- annotation[colnames(geno.sel),]
+geno.sel.t <- t(geno.sel)
+anot.geno.sel <- merge(annot.sel, geno.sel.t, by=0)
+rownames(anot.geno.sel) <- anot.geno.sel$Row.names 
+
+recode_geno <- function(geno, allele1, allele2) {
+  if (geno == 1) {
+    return(paste(allele1, allele1, sep = ""))
+  } else if (geno == 2) {
+    return(paste(allele1, allele2, sep = ""))
+  } else if (geno == 3) {
+    return(paste(allele2, allele2, sep = ""))
+  } else {
+    return(NA)  # in case of unexpected genotype values
+  }
+}
+
+for (col in colnames(anot.geno.sel)[8:ncol(anot.geno.sel)]) {
+  anot.geno.sel[[col]] <- 
+    mapply(recode_geno, geno = anot.geno.sel[[col]], 
+           allele1 = anot.geno.sel$allele.1, allele2 = anot.geno.sel$allele.2)
+}
+```
+
+OR calculation:
+
+```{r OR_calc, message=FALSE}
+snp.setup <- t(anot.geno.sel[8:743])
+snp.pheno <- merge(demog.qc, snp.setup, by = 0, sort = FALSE)
+
+snp.setup.obj <- setupSNP(snp.pheno, 14:ncol(snp.pheno), sep="")
+
+WG.all <- WGassociation(CASECONTROL, snp.setup.obj)
+OR_dom <- odds(WG.all, model="dominant")
+OR_rec <- odds(WG.all, model="recessive")
+OR_ad <- odds(WG.all, model="log-additive")
+```
+
+# Appendix 7. Associated SNP table
+
+```{r OR_merge}
+# Merging OR to the table
+OR_dom <- OR_dom %>% rename(OR_dom = OR, lower_dom = lower, upper_dom = upper)
+OR_ad <- OR_ad %>% rename(OR_ad = OR, lower_ad = lower, upper_ad = upper)
+OR_rec <- OR_rec %>% rename(OR_rec = OR, lower_rec = lower, upper_rec = upper)
+snp.annot.OR <- cbind(snp.annot, OR_ad, OR_dom, OR_rec)
+# removing unnecessary columns
+snp.annot.OR <- snp.annot.OR[,c(-1)]
+snp.annot.OR
+```
+
+# Appendix 8. Genetic score calculation
+
+Choosing most appropriate SNPs for genetic risk score calculation:
+
+```{r select_SNP}
+# recode SNP data to appropriate numeric format
+geno.sel.num <- geno.sel %>% mutate(across(where(is.numeric), ~ .x - 1))
+# merge CASECONTROL with SNPs
+geno.sel.cc <- merge(demog.qc[, c('ID', 'CASECONTROL')], geno.sel.num, by=0)
+rownames(geno.sel.cc) <- geno.sel.cc$ID
+geno.sel.cc <- geno.sel.cc[, -1:-2]
+
+mod <- stepAIC(glm(CASECONTROL ~ ., geno.sel.cc, family="binomial"), 
+               method="forward", trace=0)
+
+summary(mod)
+```
+
+```{r gen_score}
+vars <- names(coef(mod))[-1]
+var.pos <- which(names(geno.sel.cc)%in%vars)
+score <- riskScore(mod, data=geno.sel.cc, cGenPreds=var.pos, Type="unweighted")
+hist(score, main = "Figure 2. Genetic score distribution")
+```
+
+# Appendix 9. Risk score model and its validation
+
+Association model of casecontrol with genetic score:
+
+```{r cc_score}
+ss <- cbind(geno.sel.cc, score)
+mod <- glm(CASECONTROL~score, ss, family="binomial")
+mod
+```
+
+```{r mod_validation}
+predrisk <- predRisk(mod, ss)
+plotROC(data=ss, cOutcome=1, predrisk = predrisk)
+rect(0, 1.1, 1, 1.7, xpd=TRUE, col="white", border="white")
+title("Figure 3. ROC plot for genetic score model validation")
+```
+
+# References
+
+Harz C, Ludwig N, Lang S, Werner TV, Galata V, Backes C, Schmitt K, Nickels R, Krause E, Jung M, Rettig J, Keller A, Menger M, Zimmermann R, Meese E. Secretion and immunogenicity of the meningioma-associated antigen TXNDC16. J Immunol. 2014 Sep 15;193(6):3146-54. doi: 10.4049/jimmunol.1303098. Epub 2014 Aug 13. PMID: 25122923.
+
+Le Duc D, Giulivi C, Hiatt SM, Napoli E, Panoutsopoulos A, Harlan De Crescenzo A, Kotzaeridou U, Syrbe S, Anagnostou E, Azage M, Bend R, Begtrup A, Brown NJ, Büttner B, Cho MT, Cooper GM, Doering JH, Dubourg C, Everman DB, Hildebrand MS, Santos FJR, Kellam B, Keller-Ramey J, Lemke JR, Liu S, Niyazov D, Payne K, Person R, Quélin C, Schnur RE, Smith BT, Strober J, Walker S, Wallis M, Walsh L, Yang S, Yuen RKC, Ziegler A, Sticht H, Pride MC, Orosco L, Martínez-Cerdeño V, Silverman JL, Crawley JN, Scherer SW, Zarbalis KS, Jamra R. Pathogenic WDFY3 variants cause neurodevelopmental disorders and opposing effects on brain size. Brain. 2019 Sep 1;142(9):2617-2630. doi: 10.1093/brain/awz198. Erratum in: Brain. 2019 Nov 1;142(11):e63. doi: 10.1093/brain/awz259. PMID: 31327001; PMCID: PMC6736092.
+
+Yan Y, Xu Z, Chen X, Wang X, Zeng S, Zhao Z, Qian L, Li Z, Wei J, Huo L, Li X, Gong Z, Sun L. Novel Function of lncRNA ADAMTS9-AS2 in Promoting Temozolomide Resistance in Glioblastoma via Upregulating the FUS/MDM2 Ubiquitination Axis. Front Cell Dev Biol. 2019 Oct 2;7:217. doi: 10.3389/fcell.2019.00217. PMID: 31632968; PMCID: PMC6783494.
+
+Kehrer-Sawatzki H, Cooper DN. Classification of NF1 microdeletions and its importance for establishing genotype/phenotype correlations in patients with NF1 microdeletions. Hum Genet. 2021 Dec;140(12):1635-1649. doi: 10.1007/s00439-021-02363-3. Epub 2021 Sep 18. PMID: 34535841; PMCID: PMC8553723.
+
+Sharawat IK, Panda PK, Bhunia NS, Dawman L. Clinical Spectrum of TGM6-Related Movement Disorders: A New Report with a Pooled Analysis of 48 Patients. J Neurosci Rural Pract. 2021 Sep 20;12(4):656-665. doi: 10.1055/s-0041-1734006. PMID: 34737499; PMCID: PMC8559089.
+
+Zietkiewicz E, Bukowy-Bieryllo Z, Rabiasz A, Daca-Roszak P, Wojda A, Voelkel K, Rutkiewicz E, Pogorzelski A, Rasteiro M, Witt M. CFAP300: Mutations in Slavic Patients with Primary Ciliary Dyskinesia and a Role in Ciliary Dynein Arms Trafficking. Am J Respir Cell Mol Biol. 2019 Oct;61(4):440-449. doi: 10.1165/rcmb.2018-0260OC. PMID: 30916986.
+
+Bridges AE, Ramachandran S, Pathania R, Parwal U, Lester A, Rajpurohit P, Morera DS, Patel N, Singh N, Korkaya H, Manicassamy S, Prasad PD, Lokeshwar VB, Lokeshwar BL, Ganapathy V, Thangaraju M. RAD51AP1 Deficiency Reduces Tumor Growth by Targeting Stem Cell Self-Renewal. Cancer Res 2020;80:3855–66. doi: 10.1158/0008-5472.CAN-19-3713
