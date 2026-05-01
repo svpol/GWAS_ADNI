@@ -1,0 +1,1 @@
+All the info and code are in the gwas_adni.Rmd file.
