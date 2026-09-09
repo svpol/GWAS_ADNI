@@ -1,4 +1,4 @@
-\# Goal
+# Goal
 
 
 
@@ -6,7 +6,7 @@ This research presents a genome-wide association study (GWAS) analysis in order 
 
 
 
-\# Conclusion
+# Conclusion
 
 
 
@@ -18,7 +18,7 @@ The annotated genes were examined. Most part of the known genes are related to d
 
 
 
-\# Details
+# Details
 
 
 
